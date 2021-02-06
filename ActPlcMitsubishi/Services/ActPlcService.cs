@@ -10,15 +10,29 @@ namespace ActPlcMitsubishi.Services
 {
     public class ActPlcService : IActPlcService
     {
+        public event Action<string> OnActProgTypeErrorMessage = delegate { };
+        public event Action<bool> OnActProgTypeStatusChanged = delegate { };
         private IActProgType _plc;
-        private bool IsConnected = false;
+        public bool _IsConnected { get; private set; } = false;
+        public bool IsConnected
+        {
+            get => _IsConnected;
+            private set
+            {
+                if (value != _IsConnected)
+                {
+                    _IsConnected = value;
+                    OnActProgTypeStatusChanged(value);
+                }
+            }
+        }
         private ActPlcService()
         {
             try
             {
                 _plc = ActPlcHelper.Build();
             }
-            catch 
+            catch
             {
                 _plc = new ActPlcBuilder()
                     .WithAddress(AppSettingHelper.ReadSetting("plc-address"))
@@ -72,29 +86,55 @@ namespace ActPlcMitsubishi.Services
            }, TaskCreationOptions.RunContinuationsAsynchronously);
         }
 
-        public Task<CommandModel> ReadBit(CommandModel model)
+        public Task<CommandModel> Read(CommandModel model)
         {
             return Task.Factory.StartNew(() =>
             {
+                Connect();
                 lock (_plc)
                 {
-                    var res = -1;
-                    model.rc = _plc.GetDevice(model.reg, out res);
-                    model.value = res;
-                    model.message = Utils.ReturnCode((uint)model.rc);
+                    _plc.Connect();
+                    model.values = new int[model.lenght];
+                    if (model.lenght == 1)
+                    {
+                        var res = -1;
+                        model.rc = _plc.GetDevice(model.reg, out res);
+                        model.values[0] = res;
+                        model.message = Utils.ReturnCode((uint)model.rc);
+                    }
+                    else
+                        for (int i = 0; i < model.lenght; i++)
+                        {
+                            var res = -1;
+                            model.rc = _plc.GetDevice(model.reg + Convert.ToString(i + model.start, 8), out res);
+                            model.values[i] = res;
+                            model.message = Utils.ReturnCode((uint)model.rc);
+                        }
+                    _plc.Disconnect();
                     return model;
                 }
             }, TaskCreationOptions.RunContinuationsAsynchronously);
         }
 
-        public Task<CommandModel> WriteBit(CommandModel model)
+        public Task<CommandModel> Write(CommandModel model)
         {
             return Task.Factory.StartNew(() =>
             {
+                Connect();
                 lock (_plc)
                 {
-                    model.rc = _plc.SetDevice(model.reg, model.value);
-                    model.message = Utils.ReturnCode((uint)model.rc);
+                    if (model.lenght == 1)
+                    {
+                        model.rc = _plc.SetDevice(model.reg + model.start, model.values[0]);
+                        model.message = Utils.ReturnCode((uint)model.rc);
+                    }
+                    else
+                        for (int i = 0; i < model.lenght; i++)
+                        {
+                            model.rc = _plc.SetDevice(model.reg + Convert.ToString(i + model.start, 8), model.values[i]);
+                            model.message = Utils.ReturnCode((uint)model.rc);
+                        }
+                    _plc.Disconnect();
                     return model;
                 }
             }, TaskCreationOptions.RunContinuationsAsynchronously);

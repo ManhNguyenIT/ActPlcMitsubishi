@@ -9,7 +9,7 @@ namespace ActPlcMitsubishi.Interfaces
         IActPlcService WithPlc(IActProgType plc);
         IActPlcService Build();
         Task<int> Connect();
-        Task<CommandModel> ReadBit(CommandModel model);
-        Task<CommandModel> WriteBit(CommandModel model);
+        Task<CommandModel> Read(CommandModel model);
+        Task<CommandModel> Write(CommandModel model);
     }
 }
